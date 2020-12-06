@@ -18,14 +18,23 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Contribución de:
+ *
+ * Dario Correal
+ *
  """
+
 
 import sys
 import config
-from DISClib.ADT import list as lt
 from App import controller
+from App import model
+from DISClib.ADT import stack
+import timeit
 assert config
-from time import process_time
+#Borrar
+from DISClib.ADT.graph import gr
+
 """
 La vista se encarga de la interacción con el usuario.
 Presenta el menu de opciones  y  por cada seleccion
@@ -34,15 +43,14 @@ operación seleccionada.
 """
 
 # ___________________________________________________
-#  Ruta a los archivos
+#  Variables
 # ___________________________________________________
 
-
-accidentsfile = 'us_accidents_small.csv'
-accidentsfile1 = 'us_accidents_dis_2016.csv'
-accidentsfile2 = 'us_accidents_dis_2017.csv'
-accidentsfile3 = 'us_accidents_dis_2018.csv'
-accidentsfile4 = 'us_accidents_dis_2019.csv'
+citibike1 = 'Data\\201801-1-citibike-tripdata.csv'
+citibike2 = 'Data\\201801-1-citibike-tripdata.csv'
+citibike3 = 'Data\\201801-1-citibike-tripdata.csv'
+citibike4 = 'Data\\201801-1-citibike-tripdata.csv'
+recursionLimit = 20000
 
 # ___________________________________________________
 #  Menu principal
@@ -51,79 +59,143 @@ accidentsfile4 = 'us_accidents_dis_2019.csv'
 
 def printMenu():
     print("\n")
-    print("*******************************************")
-    print("Bienvenido")
+    print("------------------------------------------------------")
+    print("Bienvenido al analizador de datos de CitiBike")
+    print("------------------------------------------------------\n")
     print("1- Inicializar Analizador")
-    print("2- Cargar información de accidentes")
-    print("3- Requerimento 1")
-    print("4- Requerimento 2")
-    print("5- Requerimento 3")
-    print("6- Requerimento 4")
-    print("7- Requerimento 5")
-    print("8- Requerimento 8")
+    print("2- Cargar información CitiBike")
+    print("3- Cantidad de clusters de viajes")
+    print("4- Ruta turística cirular")
+    print("5- Estaciones críticas")
+    print("6- Ruta turística por resistencia")
+    print("7- Recomendador de rutas")
+    print("8- Ruta de interés turístico")
+    print("9- Identificación de estaciones para publicidad")
+    print("10- Identificación de bicicletas para mantenimiento")
     print("0- Salir")
-    print("*******************************************")
+    print("------------------------------------------------------")
 
+
+def optionTwo():
+    controller.loadTrips(cont)
+    numedges = controller.totalConnections(cont)
+    numvertex = controller.totalStops(cont)
+    print('Número de vértices: ' + str(numvertex))
+    print('Número de arcos: ' + str(numedges))
+    print('Límite de recursión actual: ' + str(sys.getrecursionlimit()))
+    sys.setrecursionlimit(recursionLimit)
+    print('El límite de recursión se ajusta a: ' + str(recursionLimit))
+
+def optionThree():
+    numedges = controller.totalConnections(cont)
+    numvertex = controller.totalStops(cont)
+    scc = controller.numSCC(cont)
+    print('Numero de vertices: ' + str(numvertex))
+    print('Numero de arcos: ' + str(numedges))
+    print('Número de elementos fuertemente conectados: ' + str(scc))
+
+def optionFour():
+    disponible = 0
+    station1 = 0
+    controller.ejecutarreq2(cont, disponible, station1)
+
+def optionFive():
+    controller.ejecutarreq3(cont)
+
+
+def optionSix():
+    resis = int(input('⏳ Ingrese el tiempo disponible en minutos: '))
+    inicio = input('🛑 Ingrese la estación inicial: ')
+    try:
+        resul = controller.req4(cont, resis, inicio)
+        print('las estaciones a las que se puede llegar desde', inicio, 'con',
+            resis, 'minutos son:')
+        for i in resul.keys():
+            print(i, 'desde', resul[i][0], '\n\t⬆', resul[i][1], 'minutos')
+    except:
+        print('datos no válidos')
+
+def optionSeven():
+    edad = int(input('Edad del usuario: '))
+    controller.ejecutarreq5(cont, edad)
+
+
+def optionEight():
+    lat1 = float(input('Ingrese la latitud del punto de salida: '))
+    lon1 = float(input('Ingrese la longitud del punto de salida: '))
+    lat2 = float(input('Ingrese la latitud del punto de llegada: '))
+    lon2 = float(input('Ingrese la longitud del punto de llegada: '))
+    controller.ejecutarreq6(cont, lat1, lon1, lat2, lon2)
+
+def optionNine():
+    rango = str(input('Ingrese el rango de edad (por ejemplo: 21-30): '))
+    controller.ejecutarreq7(cont, rango)
+
+def optionTen():
+    print('Ejemplos: 14580, 2018-01-24 \n\t 26701, 2018-01-13')
+    date = input('📅 Ingrese la fecha a consultar (AAAA-MM-DD): ')
+    id = input('🚲 Ingrese la id de la bicicleta a consultar: ')
+    try:
+        resul = controller.req8(cont, date, id)
+        print('Los resultados para la bicicleta', id, 'el día',
+            date, 'son:')
+        print('⏲ Tiempo de uso:', resul[0], 'minutos')
+        print('🚦 Tiempo estacionada:', resul[1], 'minutos')
+        print('🚩 Estaciones visitadas:')
+        for i in resul[2]:
+            print('\t-', i)
+    except:
+        print('Datos no válidos')
 
 """
 Menu principal
 """
+
 while True:
     printMenu()
     inputs = input('Seleccione una opción para continuar\n>')
 
-    if int(inputs[0]) == 1:
+    if int(inputs) == 1:
         print("\nInicializando....")
         # cont es el controlador que se usará de acá en adelante
         cont = controller.init()
-        print("\nInicializado....")
 
     elif int(inputs[0]) == 2:
-        print("\nCargando información de accidentes ....")
-        t1_start = process_time() #tiempo inicial
-        controller.loadData(cont,accidentsfile)
-        t1_stop = process_time() #tiempo final
-        print("Tiempo de ejecución ",t1_stop-t1_start," segundos ")
-        print('Accidentes cargados: ' + str(controller.accisSize(cont)))
-        print('Altura del arbol: ' + str(controller.indexHeight(cont)))
-        print('Elementos en el arbol: ' + str(controller.indexSize(cont)))
-        print('Menor Llave: ' + str(controller.minKey(cont)))
-        print('Mayor Llave: ' + str(controller.maxKey(cont)))
+
+        executiontime = timeit.timeit(optionTwo, number=1)
+        print("Tiempo de ejecución: " + str(executiontime))
 
     elif int(inputs[0]) == 3:
-        print("\nRequerimiento No 1 del reto 3: ")
-        LaDate = input("Fecha (YYYY-MM-DD): ")
-        controller.getAccisByRangeSev(cont, LaDate)
-        
+        executiontime = timeit.timeit(optionThree, number=1)
+        print("Tiempo de ejecución: " + str(executiontime))
+
     elif int(inputs[0]) == 4:
-        print("\nRequerimiento No 2 del reto 3: ")
-        LaDate = input("Fecha (YYYY-MM-DD): ")
-        controller.getAccidentsLess(cont, LaDate)
+        executiontime = timeit.timeit(optionFour, number=1)
+        print("Tiempo de ejecución: " + str(executiontime))
 
     elif int(inputs[0]) == 5:
-        print("\nRequerimiento No 3 del reto 3: ")
-        LaDate = input("Fecha inicio (YYYY-MM-DD): ")
-        LaDate1 = input("Fecha final (YYYY-MM-DD): ")
-        controller.getAccidentsCategory( cont , LaDate, LaDate1)
-        
+        executiontime = timeit.timeit(optionFive, number=1)
+        print("Tiempo de ejecución: " + str(executiontime))
+
     elif int(inputs[0]) == 6:
-        print("\nRequerimiento No 4 del reto 3: ")
-        LaDate = input("Fecha inicio (YYYY-MM-DD): ")
-        LaDate1 = input("Fecha final (YYYY-MM-DD): ")
-        controller.getAccidentsState( cont , LaDate, LaDate1)
+        executiontime = timeit.timeit(optionSix, number=1)
+        print("Tiempo de ejecución: " + str(executiontime))
 
     elif int(inputs[0]) == 7:
-        print("\nRequerimiento No 5 del reto 3: ")
-        LaDate = input("Hora inicio (hh:mm): ")
-        LaDate1 = input("Hora final (hh:mm): ")
-        controller.getAccidentsHour( cont , LaDate, LaDate1)
+        executiontime = timeit.timeit(optionSeven, number=1)
+        print("Tiempo de ejecución: " + str(executiontime))
 
     elif int(inputs[0]) == 8:
-        print("\nBono 1 del reto 3: ")
-        lat = input("latitud: ")
-        lon = input("longitud: ")
-        rad = input("radio en millas: ")
-        controller.getradius(cont, lon,lat,rad)
+        executiontime = timeit.timeit(optionEight, number=1)
+        print("Tiempo de ejecución: " + str(executiontime))
+
+    elif int(inputs[0]) == 9:
+        executiontime = timeit.timeit(optionNine, number=1)
+        print("Tiempo de ejecución: " + str(executiontime))
+
+    elif int(inputs) == 10:
+        executiontime = timeit.timeit(optionTen, number=1)
+        print("Tiempo de ejecución: " + str(executiontime))
 
     else:
         sys.exit(0)

@@ -18,423 +18,527 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Contribución de:
+ *
+ * Dario Correal
+ *
  """
 import config
+import math
+from DISClib.ADT.graph import gr
+from DISClib.ADT import map as m
 from DISClib.ADT import list as lt
+from DISClib.DataStructures import listiterator as it
 from DISClib.ADT import orderedmap as om
 from DISClib.DataStructures import mapentry as me
-from DISClib.ADT import map as m
-from DISClib.DataStructures import listiterator as it
-from math import radians, cos, sin, asin, sqrt
-import datetime
-from datetime import date
-import calendar
+from DISClib.Algorithms.Graphs import scc
+from DISClib.Algorithms.Graphs import dfs
+from DISClib.Algorithms.Graphs import dijsktra as djk
+from DISClib.Utils import error as error
+from DISClib.DataStructures import edge as ed
+
 assert config
 
 """
-En este archivo definimos los TADs que vamos a usar,
-es decir contiene los modelos con los datos en memoria
-
-
+En este archivo definimos los TADs que vamos a usar y las operaciones
+de creacion y consulta sobre las estructuras de datos.
 """
+
+# import datetime
+
+# # using now() to get current time
+# current_time = datetime.datetime.now()
+# print ("Year : ", end = "")
+# print (current_time.year)
+
+# -----------------------------------------------------
+#                       API
+# -----------------------------------------------------
 def newAnalyzer():
-    analyzer = { 'accidents': None,
-                'date' : None,
-                'hour': None
-                }
-    analyzer['accidents'] = lt.newList('SINGLE_LINKED', compareIds)
+    try:
+        citibike = {'graph': None,
+                    'stops': None,
+                    'pairs': None
+                    #'components': None,
+                    #'paths': None
+                    }
 
-    analyzer['date'] = om.newMap(omaptype='RBT',
-                                      comparefunction=compareDates)
-    analyzer['hour'] = om.newMap(omaptype='RBT',
-                                      comparefunction=compareHours)
-    return analyzer
-# -----------------------------------------------------
-# API del TAD Catalogo de accidentes
-# -----------------------------------------------------
-
-
-# Funciones para agregar informacion al catalogo
-def addAccident(analyzer,accident):
-    dia = accident['Start_Time']
-    accidentDate = datetime.datetime.strptime(dia, '%Y-%m-%d %H:%M:%S')
-    accidentYear = str(accidentDate.year)
-    lt.addLast(analyzer['accidents'],accident)
-    uptadeAccidentInDate(analyzer['date'], accident) 
-    uptadeAccidentInHour(analyzer['hour'], accident)
-    return analyzer
-
-def uptadeAccidentInHour(map,accident):
-    date = accident['Start_Time']
-    accidentDate = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
-    formato=":"
-    if accidentDate.minute>=30:
-        formato=str(accidentDate.hour)+":30"
-    elif accidentDate.minute<30:
-        formato=str(accidentDate.hour)+":00"
-   
-    entry = om.get(map, formato)
-
-    if entry is None:
-        hour_entry = newHourEntry()
-        om.put(map ,formato, hour_entry)  
-    else:
-        hour_entry = me.getValue(entry)
-    
-    lt.addLast(hour_entry['accidents'], accident)
-    addSeverityToDate(hour_entry['severities'],accident)
-    addStateToDate(hour_entry['state'],accident)
-    return map
-
-def uptadeAccidentInDate(map,accident):
-    date = accident['Start_Time']
-    accidentDate = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
-    entry = om.get(map, accidentDate.date())
-
-    if entry is None:
-        date_entry = newDateEntry()
-        om.put(map ,accidentDate.date(), date_entry)  
-    else:
-        date_entry = me.getValue(entry)
-    
-    lt.addLast(date_entry['accidents'], accident)
-    addSeverityToDate(date_entry['severities'],accident)
-    addStateToDate(date_entry['state'],accident)
-    return map
-
-def addSeverityToDate(dateEntry,accident):
-    
-    severity = accident['Severity']
-    entry = m.get(dateEntry, severity)
-
-    if entry is None:
-        severity_entry = newSeverityEntry(accident)
-        m.put(dateEntry , severity, severity_entry)
-    else:
-        severity_entry = me.getValue(entry)
-        
-    lt.addLast(severity_entry['listBySeverity'],accident)
-    return dateEntry
-
-def addStateToDate(dateEntry,accident):
-    
-    state = accident['State']
-    entry = m.get(dateEntry, state)
-
-    if entry is None:
-        state_entry = newState(accident)
-        m.put(dateEntry , state, state_entry)
-    else:
-        state_entry = me.getValue(entry)
-        
-    lt.addLast(state_entry['listByState'],accident)
-    return dateEntry
-
-def newHourEntry():
- 
-    entry = {'severities': None, 'accidents': None, 'state':None}
-    entry['severities'] = m.newMap(numelements=15, maptype='PROBING', comparefunction=compareSeverities)
-    entry['state'] = m.newMap(numelements=15, maptype='PROBING',comparefunction=comparestates)
-    entry['accidents'] = lt.newList('SINGLE_LINKED', compareDates)
-    return entry
-
-def newDateEntry():
- 
-    entry = {'severities': None, 'accidents': None, 'state':None}
-    entry['severities'] = m.newMap(numelements=15,
+        citibike['stops'] = m.newMap(numelements=14000,
                                      maptype='PROBING',
-                                     comparefunction=compareSeverities)
-   
-    entry['state'] = m.newMap(numelements=15, maptype='PROBING',comparefunction=comparestates)
+                                     comparefunction=compareStations)
 
-    entry['accidents'] = lt.newList('SINGLE_LINKED', compareDates)
-    return entry
+        citibike['graph'] = gr.newGraph(datastructure='ADJ_LIST',
+                                        directed=True,
+                                        size=1000,
+                                        comparefunction=compareStations)
+        citibike['pairs'] = m.newMap(numelements=14000,
+                                     maptype='PROBING',
+                                     comparefunction=comparePairs)
+        citibike['dates'] = om.newMap(omaptype='RBT',
+                                   comparefunction=compareDates)
 
-def newState(accident):
-  
-    state_entry = {'state': None, 'listByState': None}
-    state_entry['state'] = accident['State']
-    state_entry['listByState'] = lt.newList('SINGLE_LINKED', comparestatesl)
-    return state_entry
+        return citibike
+    except Exception as exp:
+        error.reraise(exp, 'model:newAnalyzer')
 
-def newSeverityEntry(accident):
-  
-    severity_entry = {'severity': None, 'listBySeverity': None}
-    severity_entry['severity'] = accident['Severity']
-    severity_entry['listBySeverity'] = lt.newList('SINGLE_LINKED', compareSeveritiesl)
-    return severity_entry
+# Funciones para agregar informacion al grafo
+
+def addTrip(citibike, trip):
+    """
+    """
+    origin = trip['start station id']
+    destination = trip['end station id']
+    duration = int(trip['tripduration'])
+    latitude1 = float(trip['start station latitude'])
+    longitude1 = float(trip['start station longitude'])
+    latitude2 = float(trip['end station latitude'])
+    longitude2 = float(trip['end station longitude'])
+    edad = 2020 - int(trip['birth year'])
+    type = trip['usertype']
+    date = trip['starttime'][:10]
+    bikeId = trip['bikeid']
+    addStation(citibike, origin)
+    addStation(citibike, destination)
+    addConnection(citibike, origin, destination, duration)
+    addStop(citibike, origin, latitude1, longitude1, edad, 's', type)
+    addStop(citibike, destination, latitude2, longitude2, edad, 'll', type)
+    addConnection(citibike, origin, destination, duration)
+    addPairs(citibike, origin, destination)
+    addDate(citibike, date, bikeId, origin, destination, duration)
+
+def addStation(citibike, stationid):
+    """
+    Adiciona una estación como un vertice del grafo
+    """
+    if not gr.containsVertex(citibike['graph'], stationid):
+            gr.insertVertex(citibike['graph'], stationid)
+    return citibike
+
+def addConnection(citibike, origin, destination, duration):
+    """
+    Adiciona un arco entre dos estaciones
+    """
+    edge = gr.getEdge(citibike['graph'], origin, destination)
+    if edge is None:
+        gr.addEdge(citibike['graph'], origin, destination, duration)
+    else:
+        prev_duration = int(ed.weight(edge))
+        duration += prev_duration
+        ed.updateWeight(edge, duration)
+
+    return citibike
+
+def addStop(citibike, stationid, latitude, longitude, edad, s_ll, type):
+    if m.contains(citibike['stops'], stationid):
+        retorno = m.get(citibike['stops'], stationid)['value']
+        m.remove(citibike['stops'], stationid)
+    else:
+        retorno = [latitude,longitude,{'0-10':0,
+                                '11-20':0,
+                                '21-30':0,
+                                '31-40':0,
+                                '41-50':0,
+                                '51-60':0,
+                                '60+':0,
+                                'total':0}, {'0-10':0,
+                                        '11-20':0,
+                                        '21-30':0,
+                                        '31-40':0,
+                                        '41-50':0,
+                                        '51-60':0,
+                                        '60+':0,
+                                        'total':0}, type]
+    if s_ll == 's':
+        a = 2
+    else:
+        a = 3
+
+    if edad in range(0,11):
+        nuevo = retorno[a].get('0-10') + 1
+        retorno[a]['0-10'] = nuevo
+    elif edad in range(11,21):
+        nuevo = retorno[a].get('11-20') + 1
+        retorno[a]['11-20'] = nuevo
+    elif edad in range(21,31):
+        nuevo = retorno[a].get('21-30') + 1
+        retorno[a]['21-30'] = nuevo
+    elif edad in range(31,41):
+        nuevo = retorno[a].get('31-40') + 1
+        retorno[a]['31-40'] = nuevo
+    elif edad in range(41,51):
+        nuevo = retorno[a].get('41-50') + 1
+        retorno[a]['41-50'] = nuevo
+    elif edad in range(51,61):
+        nuevo = retorno[a].get('51-60') + 1
+        retorno[a]['51-60'] = nuevo
+    else:
+        nuevo = retorno[a].get('60+') + 1
+        retorno[a]['60+'] = nuevo
+
+    nuevo = retorno[a].get('total') + 1
+    retorno[a]['total'] = nuevo
+
+    m.put(citibike['stops'], stationid, retorno)
+
+    return citibike
+
+def addPairs(citibike, origin, destination):
+    pair = str(origin) + ',' + str(destination) # Creo la llave compuesta por:
+                                            # string con los ids de las estaciones
+                                            # de origen concatenadas y separadas
+                                            # por una coma ','
+
+    existe = m.contains(citibike['pairs'], pair)
+    # print(existe)
+    if not existe:
+        # entry = me.newMapEntry(pair, 1)
+        m.put(citibike['pairs'], pair, 1)
+    else:
+        entry = m.get(citibike['pairs'], pair)
+        value = me.getValue(entry)
+        m.put(citibike['pairs'], pair, value + 1)
+
+def avgDuration(citibike):
+    """
+    Actualiza el valor de los arcos al promedio de la duración de los
+    viajes entre dos estaciones
+    """
+    edges = gr.edges(citibike['graph'])
+    iterator = it.newIterator(edges)
+
+    while it.hasNext(iterator):
+        element = it.next(iterator)
+        pair = str(element['vertexA']) + ',' + str(element['vertexB'])
+        entry = m.get(citibike['pairs'], pair)
+
+        repetitions = entry['value']
+        average = element['weight']/repetitions
+        # if str(element['vertexA']) == '72':
+        #    print(average)
+        ed.updateWeight(element, average)
+    return citibike
+
+def addDate(citibike, date, bikeId, origin, destination, duration):
+    if not om.contains(citibike['dates'], date): # No está la fecha
+        ids = {}                                 # Agregar info
+        stops = lt.newList(cmpfunction=compareIds)
+        lt.addFirst(stops, origin)
+        lt.addFirst(stops, destination)
+        ids[bikeId] = (duration, stops)
+        om.put(citibike['dates'], date, ids)
+    else:                                       # Está la fecha
+        value = om.get(citibike['dates'], date)
+
+        # print(value.keys())
+        # print(bikeId)
+        if bikeId not in value.keys():          # No está la bici
+            stops = lt.newList(cmpfunction=compareIds) # Agregar bici
+            lt.addFirst(stops, origin)
+            lt.addFirst(stops, destination)
+            value[bikeId] = (duration, stops)
+        else:                                   # Está la bici
+            # print(value[bikeId])
+            uso = value[bikeId][0]
+            value[bikeId] = (uso + duration, value[bikeId][1])
+            if not lt.isPresent(value[bikeId][1], origin): # No está la estación
+                lt.addLast(value[bikeId][1], origin)
+            else:
+                pass
+            if not lt.isPresent(value[bikeId][1], destination): # No está la estación
+                lt.addLast(value[bikeId][1], destination)
+            else:
+                pass
+
+
+
+
 # ==============================
 # Funciones de consulta
 # ==============================
 
-def accisSize(analyzer):
-    return lt.size(analyzer['accidents'])
+def req1 (citibike, station1, station2):
+    sc = scc.KosarajuSCC(citibike['graph'])
+    num = scc.connectedComponents(sc)
+    strongly = scc.stronglyConnected(sc, station1, station2)
+    return (num,strongly)
 
-def indexHeight(analyzer):
-    return om.height(analyzer['date'])
+def req2(citibike, disponible, station1):
+    fixed = station1
+    search = dfs.DepthFirstSearchCycles(citibike['graph'], station1, fixed)
+    return search['total']
 
-def indexSize(analyzer):
-    return om.size(analyzer['date'])
+def req3 (citibike):
+    lstArrival = []
+    lstDeparture = []
+    lstLeast = []
 
-def minKey(analyzer):
-    return om.minKey(analyzer['date'])
+    iterador = it.newIterator(m.keySet(citibike['stops']))
+    while it.hasNext(iterador):
+        element = it.next(iterador)
+        dicc = m.get(citibike['stops'],element)
+        salida = dicc['value'][2]['total']
+        llegada = dicc['value'][3]['total']
+        ambas = salida + llegada
 
-def maxKey(analyzer):
-    return om.maxKey(analyzer['date'])
+        if len(lstArrival) < 3:
+                lstArrival.append({'key':dicc['key'], 'value':salida})
+                lstDeparture.append({'key':dicc['key'], 'value':llegada})
+                lstLeast.append({'key':dicc['key'], 'value':ambas})
+        else:
+            for j in lstArrival:
+                if salida > j['value']:
+                    lstArrival.append({'key':dicc['key'], 'value':salida})
+                    lstArrival.remove(j)
+                    break
+            for j in lstDeparture:
+                if llegada > j['value']:
+                    lstDeparture.append({'key':dicc['key'], 'value':llegada})
+                    lstDeparture.remove(j)
+                    break
+            for j in lstLeast:
+                if ambas < j['value']:
+                    lstLeast.append({'key':dicc['key'], 'value':ambas})
+                    lstLeast.remove(j)
 
-def getAccidentsByDate(analyzer, day):
+    return (lstArrival,lstDeparture,lstLeast)
+
+
+def req4(citibike, resis, inicio):
+    "William Mendez"
+    pendientes = [] #str del id
+    encontrados = {} #{llegada: (origen, duracion)}
+    primeros = gr.adjacents(citibike['graph'], inicio)
+
+    iterator = it.newIterator(primeros)
+    while it.hasNext(iterator):
+        element = it.next(iterator)
+        # print(element)
+        durac = ed.weight(gr.getEdge(citibike['graph'], inicio, element)) / 60
+        if  durac <= resis:
+            encontrados[element] = (inicio, round(durac, 2))
+            pendientes.append(element)
+
+    while len(pendientes) > 0:
+        for i in pendientes:
+            adya = gr.adjacents(citibike['graph'], i)
+            if adya['size'] != 0:
+                # print(adya)
+
+                iterator = it.newIterator(adya)
+                while it.hasNext(iterator):
+                    element = it.next(iterator)
+                    # print(element)
+                    if element not in encontrados.keys() and \
+                         element not in pendientes and element != inicio:
+
+                        durac = 0
+                        llega = i
+
+                        # print(i, element)
+                        while llega != inicio:
+                            # print(durac)
+                            durac += encontrados[llega][1]
+                            llega = encontrados[llega][0]
+                            # print(durac)
+
+                        relativ = ed.weight(gr.getEdge(citibike['graph'], i,
+                                            element)) / 60
+                        # print(durac, relativ, durac + relativ, resis)
+                        if  (durac + relativ) <= resis:
+                            encontrados[element] = (i, round(relativ, 2))
+                            pendientes.append(element)
+
+            pendientes.remove(i)
+            # print(len(pendientes))
+    # print(encontrados)
+    return encontrados
+
+def req5 (citibike, edad):
+
+    if edad in range(0,11):
+        key = '0-10'
+    elif edad in range(11,21):
+        key = '11-20'
+    elif edad in range(21,31):
+        key = '21-30'
+    elif edad in range(31,41):
+        key = '31-40'
+    elif edad in range(41,51):
+        key = '41-50'
+    elif edad in range(51,61):
+        key = '51-60'
+    else:
+        key = '60+'
+
+    iterador = it.newIterator(m.keySet(citibike['stops']))
+    estacion_salida = 'Ninguna'
+    max_salida = 0
+    estacion_llegada = 'Ninguna'
+    llegada_2 = 'Ninguna'
+    max_llegada = 0
+    while it.hasNext(iterador):
+        element = it.next(iterador)
+        dicc = m.get(citibike['stops'],element)
+        salida = dicc['value'][2]
+        llegada = dicc['value'][3]
+        if salida[key] > max_salida:
+            max_salida = salida[key]
+            estacion_salida = dicc['key']
+        if llegada[key] > max_llegada:
+            llegada_2 = estacion_llegada
+            max_llegada = llegada[key]
+            estacion_llegada = dicc['key']
+
+    if estacion_llegada == estacion_salida:
+        estacion_llegada = llegada_2
+
+    ruta = []
+    dijsktra = djk.Dijkstra(citibike['graph'],str(estacion_salida))
+    if djk.hasPathTo(dijsktra, estacion_llegada):
+        if djk.hasPathTo(dijsktra, estacion_llegada):
+            ruta_lt = djk.pathTo(dijsktra, estacion_llegada)
+            iterador = it.newIterator(ruta_lt)
+            ruta.append(estacion_salida)
+            while it.hasNext(iterador):
+                element = it.next(iterador)
+                ruta.append(element['vertexB'])
+    else:
+        ruta = 'No hay ruta'
+    return (estacion_salida, estacion_llegada, ruta)
+
+def req6(citibike, lat1, lon1, lat2, lon2):
+    iterador = it.newIterator(m.keySet(citibike['stops']))
+    radio_salida = 10000
+    radio_llegada = 10000
+    estacion_salida = ''
+    estacion_llegada = ''
+    while it.hasNext(iterador):
+        llave = it.next(iterador)
+        diccCoord = m.get(citibike['stops'],llave)
+        lat = diccCoord['value'][0]
+        lon = diccCoord['value'][1]
+        haver_salida = (math.sin(math.radians((lat - lat1)) / 2))**2 \
+                        + math.cos(math.radians(lat)) \
+                        * math.cos(math.radians(lat)) \
+                        * (math.sin(math.radians((lon - lon1)) / 2))**2
+        d_s = 2*6371*math.asin(math.sqrt(haver_salida))
+        if d_s <= radio_salida:
+            radio_salida = d_s
+            estacion_salida = diccCoord['key']
+
+        haver_llegada = (math.sin(math.radians((lat - lat2)) / 2))**2 \
+                        + math.cos(math.radians(lat)) \
+                        * math.cos(math.radians(lat)) \
+                        * (math.sin(math.radians((lon - lon2)) / 2))**2
+        d_ll = 2*6371*math.asin(math.sqrt(haver_llegada))
+        if d_ll <= radio_llegada:
+            radio_llegada = d_ll
+            estacion_llegada = diccCoord['key']
+
+
+    if estacion_llegada != '' and estacion_salida != '':
+        ruta = []
+        dijsktra = djk.Dijkstra(citibike['graph'],str(estacion_salida))
+        if djk.hasPathTo(dijsktra, estacion_llegada):
+            ruta_lt = djk.pathTo(dijsktra, estacion_llegada)
+            iterador = it.newIterator(ruta_lt)
+            ruta.append(estacion_salida)
+            while it.hasNext(iterador):
+                element = it.next(iterador)
+                ruta.append(element['vertexB'])
+    else:
+        ruta = 'No hay ruta'
+
+    return (estacion_salida, estacion_llegada, ruta)
+
+def req7 (citibike, rango):
+    lista = gr.edges(citibike['graph'])
+    iterador = it.newIterator(lista)
+    maximo = 0
+    pareja = 'No hay'
+    while it.hasNext(iterador):
+        elemento = it.next(iterador)
+        diccA = m.get(citibike['stops'],elemento['vertexA'])
+        diccB = m.get(citibike['stops'],elemento['vertexB'])
+        if diccA['value'][4] == 'Customer' and diccB['value'][4] == 'Customer':
+            suma = diccA['value'][2].get(rango) + diccB['value'][3].get(rango)
+            if suma > maximo:
+                pareja = elemento
+
+    return (pareja)
+
+
+def req8(citibike, date, id):
+    infoFecha = om.get(citibike['dates'], date)
+    # print(infoFecha.keys())
+    infoBici = infoFecha[id]
+    t_uso = round((infoBici[0]) / 60)
+    t_libre = 1440 - t_uso
+    stops = []
+
+    iterator = it.newIterator(infoBici[1])
+    while it.hasNext(iterator):
+        element = it.next(iterator)
+        stops.append(element)
+    return (t_uso, t_libre, stops)
+
+
+def numSCC(graph):
+    sc = scc.KosarajuSCC(graph['graph'])
+    return scc.connectedComponents(sc)
+
+def totalConnections(analyzer):
     """
-    Para una fecha determinada, retorna el numero de accidentes
-    por severidad.
+    Retorna el total arcos del grafo
     """
-    aDate = om.get(analyzer['date'], day)
-    if aDate['key'] is not None:
-        Accismap = me.getValue(aDate)['severities']
-        sev=m.keySet(Accismap)
-        iterator= it.newIterator(sev)
-        totales=0
-        while(it.hasNext(iterator)):
-            severity1= it.next(iterator)
-            numaccis = m.get(Accismap,severity1)
-            lista= numaccis['value']
-            cuantas = lt.size(lista['listBySeverity'])
-            totales+=cuantas
-            if lista is not None:
-                print("severidad: "+ str(severity1) + " tiene : " +str(cuantas) +" accidentes")
-        print("accidentes totales: "+str(totales))
+    return gr.numEdges(analyzer['graph'])
 
-def getAccidentsLast(analyzer, day):
-    
-    aDate = om.keys(analyzer['date'],om.minKey(analyzer['date']),day)
-    iterator= it.newIterator(aDate)
-    cuantos=0
-    diaMayor=None
-    cuantosMayor=0
-    while (it.hasNext(iterator)):
-        info= it.next(iterator)
-        valor = om.get(analyzer['date'],info)['value']
-        cuantos += lt.size(valor['accidents'])
-        if(lt.size(valor['accidents'])>cuantosMayor):
-            cuantosMayor=lt.size(valor['accidents'])
-            diaMayor=info
-    print("accidentes totales: "+str(cuantos)+", la fecha con mayor accidentes es : "+str(diaMayor))
-
-def getAccidentsState(analyzer, dayin, dayend):
-    
-    aDate = om.keys(analyzer['date'],dayin,dayend)
-    iterator= it.newIterator(aDate)
-    cuantos=0
-    diaMayor=None
-    cuantosMayor=0
-    while (it.hasNext(iterator)):
-        info= it.next(iterator)
-        valor = om.get(analyzer['date'],info)['value']
-        cuantos += lt.size(valor['accidents'])
-        llaves = m.keySet(valor['state'])
-        iterator1= it.newIterator(llaves)
-        while(it.hasNext(iterator1)):
-            info1= it.next(iterator1)
-            val = m.get(valor['state'], info1)['value']['listByState']
-            if(lt.size(val)>cuantosMayor):
-                cuantosMayor=lt.size(val)
-                diaMayor=info1
-    print("accidentes totales: "+str(cuantos)+", el estado con mayor accidentes es : "+str(diaMayor)+" con : " +str(cuantosMayor))
-
-def getAccidentsHour(analyzer, dayin, dayend):
-    
-    aDate = om.keys(analyzer['hour'],dayin,dayend)
-    iterator= it.newIterator(aDate)
-    sev = m.newMap(numelements=15, maptype='PROBING', comparefunction=compareSeverities)
-    cuantos=0
-    while (it.hasNext(iterator)):
-        info= it.next(iterator)
-        valor = om.get(analyzer['hour'],info)['value']
-        cuantos += lt.size(valor['accidents'])
-        llaves = m.keySet(valor['severities'])
-        iterator1= it.newIterator(llaves)
-        while(it.hasNext(iterator1)):
-            info1= it.next(iterator1)
-            val = m.get(valor['severities'], info1)['value']['listBySeverity']
-            entry = m.get(sev, info1)
-            if(entry is None):
-                dic={'severity': info1, 'cuantos':lt.size(val)}
-                m.put(sev,info1,dic)
-            else:
-                entry['value']['cuantos']+=lt.size(val)
-    
-    data=" "
-    cuan=0
-    keys= m.keySet(sev)
-    ite=it.newIterator(keys)
-    while(it.hasNext(ite)):
-        inf=it.next(ite)
-        value = m.get(sev,inf)['value']['cuantos']
-        if(value>cuan):
-            cuan= value
-            data= inf
-
-            
-    print("accidentes totales: "+str(cuantos)+", la severidad con mayor \n accidentes es : "+str(data)+ "con : "+str(cuan)+" accidentes.")
-
-def getAccidentsCategory(analyzer, hourin, hourend):
-
-    
-    aDate = om.keys(analyzer['date'],hourin,hourend)
-    iterator= it.newIterator(aDate)
-    cuantos=0
-    diaMayor=None
-    cuantosMayor=0
-    
-    while (it.hasNext(iterator)):
-        info= it.next(iterator)
-        valor = om.get(analyzer['date'],info)['value']
-        cuantos += lt.size(valor['accidents'])
-        llaves = m.keySet(valor['severities'])
-        iterator1= it.newIterator(llaves)
-        while(it.hasNext(iterator1)):
-            info1= it.next(iterator1)
-            val = m.get(valor['severities'], info1)['value']['listBySeverity']
-            if(lt.size(val)>cuantosMayor):
-                cuantosMayor=lt.size(val)
-                diaMayor=info1
-    print("accidentes totales: "+str(cuantos)+", la severidad con mayor accidentes es : "+str(diaMayor))
-
-def getRadius(analyzer, lat1, lon1, rad):
+def totalStops(analyzer):
     """
-    sacarle accidente por acc 
+    Retorna el total de estaciones (vertices) del grafo
     """
-    lista=lt.newList()
-    actualizar(lista)
-    iterador= it.newIterator(analyzer['accidents'])
-    radius = rad # in miles
-    cuantos=0
-    while(it.hasNext(iterador)):
-        info = it.next(iterador)
-        lat2 = info['Start_Lat']
-        lon2 = info['Start_Lng']
-        date = info['Start_Time']
-        accidentDate = datetime.datetime.strptime(date, '%Y-%m-%d %H:%M:%S')
-        a = haversine(lon1, lat1, float(lon2), float(lat2))
-        if a <= radius:
-            cuantos += 1 
-            dia= accidentDate.date().weekday()
-            camb = lt.getElement(lista, dia)
-            camb['veces']+=1
-    veces=0
-    mayor=''
-    for i in range(7):
-        el=lt.getElement(lista, i)
-        if(el['veces']> veces):
-            veces = el['veces']
-            mayor = el['dia']
+    return gr.numVertices(analyzer['graph'])
 
-    print("los accidentes en ese radio fueron : "+ str(cuantos)+" , el dia de la semana con mayor \n accidentes en ese radio es: "+ str(mayor)+", con: "+ str(veces))
+# ==============================
+# Funciones Helper
+# ==============================
 
-def actualizar(lista):
-    formato0 = {'llave':0, 'dia':"domingo", 'veces':0}
-    formato1 = {'llave':1, 'dia':"lunes", 'veces':0}
-    formato2 = {'llave':2, 'dia':"martes", 'veces':0}
-    formato3 = {'llave':3, 'dia':"miercoles", 'veces':0}
-    formato4 = {'llave':4, 'dia':"jueves", 'veces':0}
-    formato5 = {'llave':5, 'dia':"viernes", 'veces':0}
-    formato6 = {'llave':6, 'dia':"sabado", 'veces':0}
-    for i in range (7):
-        if(i==0):
-            lt.addLast(lista, formato0)
-        elif(i==1):
-            lt.addLast(lista, formato1)
-        elif(i==2):
-            lt.addLast(lista, formato2)
-        elif(i==3):
-            lt.addLast(lista, formato3)
-        elif(i==4):
-            lt.addLast(lista, formato4)
-        elif(i==5):
-            lt.addLast(lista, formato5)
-        elif(i==6):
-            lt.addLast(lista, formato6)
-
-    print(lt.getElement(lista,0))  
-    print(lt.getElement(lista,5))  
-    print(lt.getElement(lista,3))  
 # ==============================
 # Funciones de Comparacion
 # ==============================
 
-def haversine(lon1, lat1, lon2, lat2):
-    """
-    Calculate the great circle distance between two points 
-    on the earth (specified in decimal degrees)
-    formula tomada de https://stackoverflow.com/questions/42686300/how-to-check-if-coordinate-inside-certain-area-python
-    """
-    # convert decimal degrees to radians 
-    lon1, lat1, lon2, lat2 = map(radians, [lon1, lat1, lon2, lat2])
-
-    # haversine formula 
-    dlon = lon2 - lon1 
-    dlat = lat2 - lat1 
-    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
-    c = 2 * asin(sqrt(a)) 
-    r = 3956 # Radius of earth in miles. Use 3956 for miles
-    return c * r
-
-
-def compareIds(id1, id2):
-    """
-    Compara dos crimenes
-    """
-    if (id1 == id2):
+def compareStations(stop, keyvaluestop):
+    stopcode = str(keyvaluestop['key'])
+    if (stop == stopcode):
         return 0
-    elif id1 > id2:
+    elif (stop > stopcode):
         return 1
     else:
         return -1
 
-def compareDates(date1, date2):
+def comparePairs(id1, id2):
+    id2 = id2['key']
+    # print(id1, id2)
+    if (id1 == id2):
+        return 0
+    elif (id1 < id2):
+        return -1
+    else:
+        return 1
 
+def compareDates(date1, date2):
     if (date1 == date2):
         return 0
     elif (date1 > date2):
         return 1
-    else: 
-        return -1
-
-def compareSeverities(Sev1, Sev2):
-    if (Sev1 == Sev2['key']):
-        return 0
-    elif (Sev1 > Sev2['key']) :
-        return 1
     else:
         return -1
 
-def compareSeveritiesl(cat1, cat2):
-    if (cat1 == cat2):
+def compareIds(date1, date2):
+    # print(date1, date2)
+    if (date1 == date2):
         return 0
-    elif (cat1 > cat2):
-        return 1
-    else:
-        return -1
-
-def comparestates(state1, state2):
-    if (state1 == state2['key']):
-        return 0
-    elif (state1 > state2['key']) :
-        return 1
-    else:
-        return -1
-
-def comparestatesl(state1, state2):
-    if (state1 == state2):
-        return 0
-    elif (state1 > state2) :
-        return 1
-    else:
-        return -1
-
-def compareHours(hour1, hour2):
-    if (hour1 == hour2):
-        return 0
-    elif (hour1 > hour2) :
+    elif (date1 > date2):
         return 1
     else:
         return -1

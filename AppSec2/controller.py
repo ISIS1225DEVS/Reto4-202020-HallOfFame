@@ -18,12 +18,17 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ * Contribución de:
+ *
+ * Dario Correal
+ *
  """
 
+import os
 import config as cf
 from App import model
-import datetime
 import csv
+import os
 
 """
 El controlador se encarga de mediar entre la vista y el modelo.
@@ -37,91 +42,97 @@ recae sobre el controlador.
 #  Inicializacion del catalogo
 # ___________________________________________________
 
-
 def init():
     """
-    Llama la funcion de inicializacion del modelo.
+    Llama la funcion de inicializacion  del modelo.
     """
+    # analyzer es utilizado para interactuar con el modelo
     analyzer = model.newAnalyzer()
     return analyzer
+
 # ___________________________________________________
 #  Funciones para la carga de datos y almacenamiento
 #  de datos en los modelos
 # ___________________________________________________
 
-def loadData(analyzer, accidentsfile):
-    """
-    Carga los datos de los archivos CSV en el modelo
-    """
-    accidentsfile = cf.data_dir + accidentsfile
-    input_file = csv.DictReader(open(accidentsfile, encoding="utf-8"),
+def loadTrips(citibike):
+    for filename in os.listdir(cf.data_dir):
+        if filename.endswith('.csv'):
+            print('Cargando archivo: ' + filename)
+            loadFile(citibike, filename)
+    model.avgDuration(citibike)
+
+    return citibike
+
+def loadFile(citibike, tripfile):
+    tripfile = cf.data_dir + tripfile
+    input_file = csv.DictReader(open(tripfile, encoding="utf-8"),
                                 delimiter=",")
-    for acci in input_file:
-        model.addAccident(analyzer, acci)
-    return analyzer
+    for trip in input_file:
+        model.addTrip(citibike, trip)
+    return citibike
 
 # ___________________________________________________
 #  Funciones para consultas
 # ___________________________________________________
-def accisSize(analyzer):
+def ejecutarreq2 (citibike, disponible, station1):
+    model.req2(citibike, disponible, station1)
+
+def ejecutarreq3 (citibike):
+    retorno = model.req3(citibike)
+    a = []
+    b = []
+    c = []
+    for j in retorno[0]:
+        a.append('La estación '+ str(j['key']) + ' con '+ str(j['value']) + ' llegadas')
+    for j in retorno[1]:
+        b.append('La estación '+ str(j['key']) + ' con '+ str(j['value']) + ' salidas')
+    for j in retorno[2]:
+        c.append('La estación '+ str(j['key']) + ' con '+ str(j['value']) + ' llegadas y salidas')
+
+    print ('Las Estaciones con más llegadas son: ', a)
+    print ('Las Estaciones con más salidas son: ', b)
+    print ('Las Estaciones con menos llegadas y salidas son: ', c)
+
+def req4(citibike, resis, inicio):
+    return model.req4(citibike, resis, inicio)
+
+def ejecutarreq5 (citibike, edad):
+    retorno = model.req5(citibike, edad)
+    print ('La estación de la que más sale gente del grupo de edad es la: ', retorno[0])
+    print ('La estación a la que más llega gente del grupo de edad es la: ', retorno[1])
+    print ('La ruta entre esas estaciones es: ', retorno[2])
+
+
+def ejecutarreq6 (citibike, lat1, lon1, lat2, lon2):
+    retorno = model.req6(citibike, lat1, lon1, lat2, lon2)
+    print ('La estación más cercana al punto de salida es la: ', retorno[0])
+    print ('La estación más cercana al destino es la: ', retorno[1])
+    print ('La ruta entre estas estaciones es: ', retorno[2])
+
+def ejecutarreq7 (citibike, rango):
+    retorno = model.req7(citibike, rango)
+    if retorno != 'No hay':
+        print ('La estación de salida es la ', retorno['vertexA'])
+        print ('La estación de llegada es la ', retorno['vertexB'])
+    else:
+        print(retorno)
+
+
+def req8(citibike, date, id):
+    return model.req8(citibike, date, id)
+
+def totalConnections(analyzer):
     """
-    Numero de crimenes leidos
+    Total de enlaces entre las paradas
     """
-    return model.accisSize(analyzer)
+    return model.totalConnections(analyzer)
 
-
-def indexHeight(analyzer):
+def totalStops(analyzer):
     """
-    Altura del indice (arbol)
+    Total de paradas de autobus
     """
-    return model.indexHeight(analyzer)
+    return model.totalStops(analyzer)
 
-
-def indexSize(analyzer):
-    """
-    Numero de nodos en el arbol
-    """
-    return model.indexSize(analyzer)
-
-
-def minKey(analyzer):
-    """
-    La menor llave del arbol
-    """
-    return model.minKey(analyzer)
-
-def maxKey(analyzer):
-    """
-    La mayor llave del arbol
-    """
-    return model.maxKey(analyzer)
-
-def getAccisByRangeSev(analyzer, LaDate):
-    """
-    Retorna el total de crimenes de un tipo especifico en una
-    fecha determinada
-    """
-    dia = datetime.datetime.strptime(LaDate, '%Y-%m-%d')
-    model.getAccidentsByDate(analyzer, dia.date())
-
-def getAccidentsLess(analyzer, day):
-    dia = datetime.datetime.strptime(day, '%Y-%m-%d')
-    model.getAccidentsLast(analyzer, dia.date())
-
-def getAccidentsState(analyzer, dayin, dayend):
-    diain = datetime.datetime.strptime(dayin, '%Y-%m-%d')
-    diaend = datetime.datetime.strptime(dayend, '%Y-%m-%d')
-    model.getAccidentsState(analyzer, diain.date(),diaend.date())
-
-def getAccidentsCategory(analyzer, dayin, dayend):
-    diain = datetime.datetime.strptime(dayin, '%Y-%m-%d')
-    diaend = datetime.datetime.strptime(dayend, '%Y-%m-%d')
-    model.getAccidentsCategory(analyzer, diain.date(),diaend.date())
-
-def getAccidentsHour(analyzer, dayin, dayend):
-    diain = datetime.datetime.strptime(dayin, '%H:%M')
-    diaend = datetime.datetime.strptime(dayend, '%H:%M')
-    model.getAccidentsHour(analyzer, str(diain.time()),str(diaend.time()))
-
-def getradius(analyzer, lng, ltd, radius):
-    model.getRadius(analyzer,float(ltd),float(lng), float(radius))
+def numSCC(analyzer):
+    return model.numSCC(analyzer)
