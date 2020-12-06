@@ -18,14 +18,11 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
- * Contribución de:
- *
- * Dario Correal
- *
  """
 
 import config as cf
 from App import model
+import datetime
 import csv
 
 """
@@ -41,11 +38,90 @@ recae sobre el controlador.
 # ___________________________________________________
 
 
+def init():
+    """
+    Llama la funcion de inicializacion del modelo.
+    """
+    analyzer = model.newAnalyzer()
+    return analyzer
 # ___________________________________________________
 #  Funciones para la carga de datos y almacenamiento
 #  de datos en los modelos
 # ___________________________________________________
 
+def loadData(analyzer, accidentsfile):
+    """
+    Carga los datos de los archivos CSV en el modelo
+    """
+    accidentsfile = cf.data_dir + accidentsfile
+    input_file = csv.DictReader(open(accidentsfile, encoding="utf-8"),
+                                delimiter=",")
+    for acci in input_file:
+        model.addAccident(analyzer, acci)
+    return analyzer
+
 # ___________________________________________________
 #  Funciones para consultas
 # ___________________________________________________
+def accisSize(analyzer):
+    """
+    Numero de crimenes leidos
+    """
+    return model.accisSize(analyzer)
+
+
+def indexHeight(analyzer):
+    """
+    Altura del indice (arbol)
+    """
+    return model.indexHeight(analyzer)
+
+
+def indexSize(analyzer):
+    """
+    Numero de nodos en el arbol
+    """
+    return model.indexSize(analyzer)
+
+
+def minKey(analyzer):
+    """
+    La menor llave del arbol
+    """
+    return model.minKey(analyzer)
+
+def maxKey(analyzer):
+    """
+    La mayor llave del arbol
+    """
+    return model.maxKey(analyzer)
+
+def getAccisByRangeSev(analyzer, LaDate):
+    """
+    Retorna el total de crimenes de un tipo especifico en una
+    fecha determinada
+    """
+    dia = datetime.datetime.strptime(LaDate, '%Y-%m-%d')
+    model.getAccidentsByDate(analyzer, dia.date())
+
+def getAccidentsLess(analyzer, day):
+    dia = datetime.datetime.strptime(day, '%Y-%m-%d')
+    model.getAccidentsLast(analyzer, dia.date())
+
+def getAccidentsState(analyzer, dayin, dayend):
+    diain = datetime.datetime.strptime(dayin, '%Y-%m-%d')
+    diaend = datetime.datetime.strptime(dayend, '%Y-%m-%d')
+    model.getAccidentsState(analyzer, diain.date(),diaend.date())
+
+def getAccidentsCategory(analyzer, dayin, dayend):
+    diain = datetime.datetime.strptime(dayin, '%Y-%m-%d')
+    diaend = datetime.datetime.strptime(dayend, '%Y-%m-%d')
+    model.getAccidentsCategory(analyzer, diain.date(),diaend.date())
+
+def getAccidentsHour(analyzer, dayin, dayend):
+    diain = datetime.datetime.strptime(dayin, '%H:%M')
+    diaend = datetime.datetime.strptime(dayend, '%H:%M')
+    model.getAccidentsHour(analyzer, str(diain.time()),str(diaend.time()))
+
+def getradius(analyzer, lng, ltd, radius):
+    model.getRadius(analyzer,float(ltd),float(lng), float(radius))
